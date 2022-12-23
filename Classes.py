@@ -116,8 +116,55 @@ class EDA_DataFrame():
         sns.heatmap(self.dataframe[self.num_columns].corr(), annot = True)
     
 
-    def outliers(self):
-        
-        num_df = self.dataframe[self.num_columns]
+    def outliers(self, attr = "All") -> pd.DataFrame:
+
+        if attr == "All":
+            searched_attrs = self.num_columns
+        elif (type(attr) == str):
+            if (attr.upper() in [col.upper() for col in self.num_columns]):
+                i = [num_col.upper() for num_col in self.num_columns].index(attr.upper())
+                searched_attrs = [self.num_columns[i]]
+            else:
+                print("The given attribute couldn't be found in the DataFrame's numeric attributes")
+                return
+        elif (type(attr) == list):
+            searched_attrs = []
+            for col in attr:
+                if col.upper() in [col.upper() for col in self.num_columns]:
+                    i = [num_col.upper() for num_col in self.num_columns].index(col.upper())
+                    searched_attrs.append(self.num_columns[i])
+                else:
+                    print("The given attribute couldn't be found in the DataFrame's numeric attributes")
+                    return
+        else:
+            print("The given attribute couldn't be found in the DataFrame's numeric attributes")
+            return
+
+        l_limit = []
+        u_limit = []
+        for col in self.num_columns:
+            q1 = self.dataframe[col].quantile(0.25)
+            q3 = self.dataframe[col].quantile(0.75)
+            iqr = q3 - q1
+            l_limit.append(q1 - 1.5 * iqr)
+            u_limit.append(q3 + 1.5 * iqr)
+
+        outliers_df = pd.DataFrame({"LowerLimit": l_limit, "UpperLimit": u_limit},
+            index = self.num_columns) 
+        self.outliers_range = outliers_df
+
+        num_outliers_df = self.dataframe[searched_attrs].copy()
+        for i, col in enumerate(searched_attrs):
+            num_outliers_df.loc[:, col] = np.where(
+                ((num_outliers_df.loc[:, col] < self.outliers_range.loc[col, "LowerLimit"]) |
+                (num_outliers_df.loc[:, col] > self.outliers_range.loc[col, "UpperLimit"])) &
+                (pd.notnull(num_outliers_df.loc[:, col])),
+                num_outliers_df.loc[:, col], np.nan) 
+    
+        new_col = num_outliers_df.notna().sum(axis = 1).tolist()
+        num_outliers_df["N_Outliers"] = new_col
+
+        return num_outliers_df
+
         
 
