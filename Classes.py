@@ -2,61 +2,148 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from dateutil.parser import parse
 import math
+import re
 
-class EDA_DataFrame():
-    def __init__(self, df:pd.DataFrame):
+class EDAtaFrame(pd.DataFrame):
+
+    @property
+    def _constructor(self):
+        return EDAtaFrame
+
     
-        self.dataframe = df
+    def __init__(self, *args, **kwargs):
+        _metadata = ["cat_columns", "num_columns"]
+        super().__init__(*args, **kwargs)        
 
-        cols = self.dataframe.columns.to_list()
+    
+    def general_info(self, cat_threshold = 0.05):
+
+        cols = self.columns.to_list()
 
         dtypes = []
+        sec_dtypes = []
         notnulls = []
         notnulls_p = []
         unique = []
         unique_p = []
-        for col in cols:
-            dtypes.append(str(self.dataframe[col].dtype))
-            notnulls.append(self.dataframe[col].notnull().sum())
-            notnulls_p.append(
-                round(self.dataframe[col].notnull().sum()/self.dataframe.shape[0], 3))
-            unique.append(self.dataframe[col].nunique())
-            unique_p.append(
-                round(self.dataframe[col].nunique()/self.dataframe.shape[0], 3))  
 
-        df = pd.DataFrame({"Column": cols, "Dtype": dtypes, "Non_Null": notnulls, 
-                            "Non_Null_perc": notnulls_p, "Unique": unique, 
+        for col in cols:
+            dtypes.append(str(self[col].dtype))
+            notnulls.append(self[col].notnull().sum())
+            notnulls_p.append(
+                round(self[col].notnull().sum()/self.shape[0], 3))
+            unique.append(self[col].nunique())
+            unique_p.append(
+                round(self[col].nunique()/self.shape[0], 3))  
+        
+            i = 0
+            value = self.iloc[i].loc[col]
+            while pd.isnull(value):
+                i += 1
+                value = self.iloc[i].loc[col]
+
+            if isinstance(value, str):
+                try:
+                    float(value)
+                    sec_dtypes.append("numeric")
+                    continue
+                except:
+                    pass
+                try:
+                    self.loc[col] = parse(value)
+                    sec_dtypes.append("date")
+                    continue
+                except:
+                    pass
+                if re.match("^[/[|/{]", value):
+                    sec_dtypes.append("structured")
+                elif unique_p[-1] / notnulls_p[-1] < cat_threshold:
+                    sec_dtypes.append("categorical")
+                else:
+                    sec_dtypes.append("text")
+            elif unique[-1] == 2:
+                bool_values = self[col].value_counts().index.to_list()
+                if (True in bool_values) | (False in bool_values):
+                    sec_dtypes.append("bool")
+            elif isinstance(value, (int, float)):
+                sec_dtypes.append("numeric")
+            else:
+                sec_dtypes.append("other")
+           
+        df = pd.DataFrame({"Column": cols, "Detected_Dtype": dtypes, "Classified_Dtype": sec_dtypes,
+                            "Non_Null": notnulls, "Non_Null_perc": notnulls_p, "Unique": unique, 
                             "Unique_perc": unique_p})
         
         print("DataFrame's shape: {} columns by {} rows" \
-            .format(self.dataframe.shape[1], self.dataframe.shape[0]))
-        print(round(df,2), end = "\n\n")
+            .format(self.shape[1], self.shape[0]))
+        #print(round(df,2), end = "\n\n")
         print("Number of incomplete rows (with one or more null values): {} out of {} ({}%)" \
-            .format(self.dataframe[self.dataframe.isna().any(axis=1)].shape[0],
-            self.dataframe.shape[0], 
-            100*round(self.dataframe[self.dataframe.isna().any(axis=1)].shape[0]/self.dataframe.shape[0], 4)))
-
-        num_cols = df[(df["Dtype"].str.contains("float")) | \
-            (df["Dtype"].str.contains("int"))].loc[:,"Column"].to_list()
-
-        cat_cols = df[((df["Dtype"] == "object") | (df["Dtype"] == "bool")) 
-                            & (df["Unique_perc"] < 0.05)].loc[:,"Column"].to_list()
+            .format(self[self.isna().any(axis=1)].shape[0], 
+                    self.shape[0], 
+                    100*round(self[self.isna().any(axis=1)].shape[0]/self.shape[0], 4)))
+        
+        num_cols = df[df["Classified_Dtype"] == "numeric"].loc[:,"Column"].to_list()
+        cat_cols = df[(df["Classified_Dtype"] == "categorical") \
+                        | (df["Classified_Dtype"] == "bool")].loc[:,"Column"].to_list()
+        date_cols = df[df["Classified_Dtype"] == "date"].loc[:,"Column"].to_list()
 
         self.cat_columns = cat_cols
         self.num_columns = num_cols
+        self.date_columns = date_cols
+
+        print("Categorical Attributes: (Can be modified through method 'update_cat_attr')\n\t{}".format(self.cat_columns))
+        print("Numerical Attributes: (Can be modified through method 'update_num_attr')\n\t{}".format(self.num_columns))
+        print("Date Attributes: (Can be modified through method 'update_date_attr')\n\t{}".format(self.date_columns))
+
+        return df
+
+
+    def update_cat_attr(self, new_cat_list):
+        if isinstance(new_cat_list, list):
+            for attr in new_cat_list:
+                if attr in self.columns:
+                    pass
+                else:
+                    raise ValueError("Column {} is not defined in EDataFrame object".format(attr))
+            self.cat_columns = new_cat_list
+        else:
+            raise TypeError("The input must be a list")
+
+
+    def update_num_attr(self, new_num_list):
+        if isinstance(new_num_list, list):
+            for attr in new_num_list:
+                if attr in self.columns:
+                    pass
+                else:
+                    raise ValueError("Column {} is not defined in EDataFrame object".format(attr))
+            self.num_columns = new_num_list
+        else:
+            raise TypeError("The input must be a list")
+
+    
+    def update_date_attr(self, new_date_list):
+        if isinstance(new_date_list, list):
+            for attr in new_date_list:
+                if attr in self.columns:
+                    pass
+                else:
+                    raise ValueError("Column {} is not defined in EDataFrame object".format(attr))
+            self.num_columns = new_date_list
+        else:
+            raise TypeError("The input must be a list")
 
 
     def search_duplicates(self):
         print("This DataFrame has {} duplicated rows considering all its attributes and," \
-            .format(self.dataframe[self.dataframe.duplicated(keep = False)].shape[0]))
-        for i, col1 in enumerate(self.dataframe.columns):
-            n_duplicated = self.dataframe[self.dataframe \
-                .loc[:, self.dataframe.columns != col1].duplicated(keep = False)].shape[0]
+            .format(self[self.duplicated(keep = False)].shape[0]))
+        for i, col1 in enumerate(self.columns):
+            n_duplicated = self[self.loc[:, self.columns != col1].duplicated(keep = False)].shape[0]
             print("\t {} duplicated rows when excluding only {},".format(n_duplicated, col1))
-            for j, col2 in enumerate(self.dataframe.columns):
-                n_duplicated2 = self.dataframe[self.dataframe. \
-                loc[:, (self.dataframe.columns != col1) & (self.dataframe.columns != col2)] \
+            for j, col2 in enumerate(self.columns):
+                n_duplicated2 = self[self.loc[:, (self.columns != col1) & (self.columns != col2)] \
                     .duplicated(keep = False)].shape[0]
                 if n_duplicated2 != 0:
                     print("\t\t but {} duplicated rows when excluding the {}-{} pair," \
@@ -71,8 +158,8 @@ class EDA_DataFrame():
             fig, ax = plt.subplots(rows_plots, 3, figsize = (15, rows_plots*5), sharey = True)
             fig.suptitle('Univariate Analysis of the Categorical Attributes', fontsize=16)
             for i, col in enumerate(self.cat_columns):
-                x = self.dataframe[col].value_counts().index.to_list()
-                y = self.dataframe[col].value_counts(normalize = True).values
+                x = self[col].value_counts().index.to_list()
+                y = self[col].value_counts(normalize = True).values
                 sns.barplot(x = x, y = y, ax = ax[math.floor(i/3)][int(i%3)]).set_title(col)
                 ax[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
                 
@@ -90,7 +177,7 @@ class EDA_DataFrame():
             fig2, ax2 = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
             fig2.suptitle('Univariate Analysis of the Numerical Attributes', fontsize=16)
             for i, col in enumerate(self.num_columns):
-                sns.kdeplot(data = self.dataframe[self.num_columns], x = col, ax = ax2[math.floor(i/3)][int(i%3)])
+                sns.kdeplot(data = self[self.num_columns], x = col, ax = ax2[math.floor(i/3)][int(i%3)])
                 ax[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
                 
                 for bar in ax[math.floor(i/3)][int(i%3)].patches:
@@ -107,7 +194,7 @@ class EDA_DataFrame():
             fig3, ax3 = plt.subplots(rows_plots, 3, figsize = (15, rows_plots*5))
             fig3.suptitle('Visualization of Outliers in Numerical Attributes', fontsize=16)
             for i, col in enumerate(self.num_columns):
-                sns.boxplot(data = self.dataframe[self.num_columns], x = col, ax = ax3[math.floor(i/3)][int(i%3)], fliersize = 0.5)
+                sns.boxplot(data = self[self.num_columns], x = col, ax = ax3[math.floor(i/3)][int(i%3)], fliersize = 0.5)
             plt.show()
     
     
@@ -116,6 +203,11 @@ class EDA_DataFrame():
         sns.heatmap(self.dataframe[self.num_columns].corr(), annot = True)
     
 
+    def bivariate_analysis(self, x = "All", y = "All", graph = ""):
+        pass
+
+    
+    
     def outliers(self, attr = "All") -> pd.DataFrame:
 
         if attr == "All":
@@ -125,8 +217,7 @@ class EDA_DataFrame():
                 i = [num_col.upper() for num_col in self.num_columns].index(attr.upper())
                 searched_attrs = [self.num_columns[i]]
             else:
-                print("The given attribute couldn't be found in the DataFrame's numeric attributes")
-                return
+                raise ValueError("The given attribute couldn't be found in the DataFrame's numeric attributes")
         elif (type(attr) == list):
             searched_attrs = []
             for col in attr:
@@ -134,11 +225,9 @@ class EDA_DataFrame():
                     i = [num_col.upper() for num_col in self.num_columns].index(col.upper())
                     searched_attrs.append(self.num_columns[i])
                 else:
-                    print("The given attribute couldn't be found in the DataFrame's numeric attributes")
-                    return
+                    raise ValueError("The given attribute couldn't be found in the DataFrame's numeric attributes")
         else:
-            print("The given attribute couldn't be found in the DataFrame's numeric attributes")
-            return
+            raise ValueError("The given attribute couldn't be found in the DataFrame's numeric attributes")
 
         l_limit = []
         u_limit = []
