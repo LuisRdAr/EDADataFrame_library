@@ -23,10 +23,10 @@ class EDADataFrame(pd.DataFrame):
         return EDADataFrame
 
 
-    def __init__(self, target: str = None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)    
         _metadata = ["target", "cat_columns", "num_columns", "date_columns", "outliers_range"]
-        self.target = target
+        #self.target = target
         self.cat_columns = []
         self.num_columns = []
         self.date_columns = []
@@ -260,7 +260,7 @@ class EDADataFrame(pd.DataFrame):
             raise TypeError("The input must be a list")
 
 
-    def search_duplicates(self, show = False) -> None or pd.DataFrame:
+    def search_duplicates(self, level: int = 0, show: bool = False) -> None or pd.DataFrame:
         """
         Searches for duplicated rows in the EDADataFrame, considering all columns, excluding each column
         and excluding each pair of columns.
@@ -268,6 +268,7 @@ class EDADataFrame(pd.DataFrame):
 
         Parameters:
         ----------
+        level: number of columns excluded when searching for duplicates. 
         show: boolean variable that defines whether it returns the duplicated rows or not.
 
         Returns:
@@ -275,20 +276,22 @@ class EDADataFrame(pd.DataFrame):
         df: DataFrame with the duplicated rows.
         """
 
-        print("This DataFrame has {} duplicated rows considering all its attributes and," \
+        print("This DataFrame has {} duplicated rows considering all its attributes" \
             .format(self[self.duplicated(keep = False)].shape[0]))
-        for i, col1 in enumerate(self.columns):
-            n_duplicated = self[self.loc[:, self.columns != col1].duplicated(keep = False)].shape[0]
-            print("\t {} duplicated rows when excluding only {},".format(n_duplicated, col1))
-            for j, col2 in enumerate(self.columns):
-                n_duplicated2 = self[self.loc[:, (self.columns != col1) & (self.columns != col2)] \
-                    .duplicated(keep = False)].shape[0]
-                if n_duplicated2 != 0:
-                    print("\t\t {} duplicated rows when excluding the {}-{} pair," \
-                        .format(n_duplicated2, col1, col2))
+        if level == 1:
+            for i, col1 in enumerate(self.columns):
+                n_duplicated = self[self.loc[:, self.columns != col1].duplicated(keep = False)].shape[0]
+                print("\t {} duplicated rows when excluding only {},".format(n_duplicated, col1))
+                if level >= 2:
+                    for j, col2 in enumerate(self.columns):
+                        n_duplicated2 = self[self.loc[:, (self.columns != col1) & (self.columns != col2)] \
+                            .duplicated(keep = False)].shape[0]
+                        if n_duplicated2 != 0:
+                            print("\t\t {} duplicated rows when excluding the {}-{} pair," \
+                                .format(n_duplicated2, col1, col2))
 
 
-    def univariate_analysis(self, attrs: list = "All") -> None:
+    def univariate_analysis(self, attrs: list = "All", num_graph: str = "kde") -> None:
         """
         Plots barplots for the categorical attributes defined in self.cat_columns or
         specified categorical columns in 'attrs' arg, kdeplots and boxplots 
@@ -299,6 +302,7 @@ class EDADataFrame(pd.DataFrame):
         ----------
         attrs: by default it's assigned as "All". It can be defined as a list which 
         contains the columns desired to be plotted.
+        num_graph: argument to define the numeric plot. Can be 'kde' or 'bar'.
         """
 
         if self.cat_columns or self.num_columns:
@@ -325,20 +329,31 @@ class EDADataFrame(pd.DataFrame):
         n_cat_plots = len(cat_plots)
         if n_cat_plots > 0:
             rows_plots = math.ceil(n_cat_plots/3)
-            fig, ax = plt.subplots(rows_plots, 3, figsize = (15, rows_plots*5), sharey = True)
+            fig, ax = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5), sharey = True)
             fig.suptitle('Univariate Analysis of the Categorical Attributes', fontsize=16)
             for i, col in enumerate(cat_plots):
                 x = self[col].value_counts().index.to_list()
                 y = self[col].value_counts(normalize = True).values
-                sns.barplot(x = x, y = y, ax = ax[math.floor(i/3)][int(i%3)]).set_title(col)
-                ax[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
-                
-                for bar in ax[math.floor(i/3)][int(i%3)].patches:
-                    ax[math.floor(i/3)][int(i%3)].annotate(format(bar.get_height(), '.3f'),
-                            (bar.get_x() + bar.get_width() / 2,
-                            bar.get_height()), ha='center', va='center',
-                            size=10, xytext=(0, 5),
-                            textcoords='offset points');
+                if n_cat_plots > 3:
+                    sns.barplot(x = x, y = y, ax = ax[math.floor(i/3)][int(i%3)]).set_title(col)
+                    ax[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
+                    
+                    for bar in ax[math.floor(i/3)][int(i%3)].patches:
+                        ax[math.floor(i/3)][int(i%3)].annotate(format(bar.get_height(), '.3f'),
+                                (bar.get_x() + bar.get_width() / 2,
+                                bar.get_height()), ha='center', va='center',
+                                size=10, xytext=(0, 5),
+                                textcoords='offset points');
+                else:
+                    sns.barplot(x = x, y = y, ax = ax[math.floor(i/3)]).set_title(col)
+                    ax[math.floor(i/3)].set_ylabel("Percentage") 
+                    
+                    for bar in ax[math.floor(i/3)].patches:
+                        ax[math.floor(i/3)].annotate(format(bar.get_height(), '.3f'),
+                                (bar.get_x() + bar.get_width() / 2,
+                                bar.get_height()), ha='center', va='center',
+                                size=10, xytext=(0, 5),
+                                textcoords='offset points');
             plt.show()
 
         n_num_plots = len(num_plots)
@@ -347,21 +362,43 @@ class EDADataFrame(pd.DataFrame):
             fig2, ax2 = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
             fig2.suptitle('Univariate Analysis of the Numerical Attributes', fontsize=16)
             for i, col in enumerate(num_plots):
-                sns.kdeplot(data = self[num_plots], x = col, ax = ax2[math.floor(i/3)][int(i%3)])
-                ax[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
-                
-                for bar in ax[math.floor(i/3)][int(i%3)].patches:
-                    ax[math.floor(i/3)][int(i%3)].annotate(format(bar.get_height(), '.3f'),
-                            (bar.get_x() + bar.get_width() / 2,
-                            bar.get_height()), ha='center', va='center',
-                            size=10, xytext=(0, 5),
-                            textcoords='offset points');
+                if n_num_plots > 3:
+                    if num_graph == "kde":
+                        sns.kdeplot(data = self[num_plots], x = col, ax = ax2[math.floor(i/3)][int(i%3)])
+                    elif num_graph == "bar":
+                        sns.histplot(data = self[num_plots], x = col, kde = False, stat = "percent", \
+                            ax = ax2[math.floor(i/3)][int(i%3)])
+                        ax2[math.floor(i/3)][int(i%3)].set_ylabel("Percentage") 
+                    elif num_graph == "both":
+                        sns.histplot(data = self[num_plots], x = col, kde = True, stat = "percent", \
+                            ax = ax2[math.floor(i/3)][int(i%3)])
+                        ax2[math.floor(i/3)][int(i%3)].set_ylabel("Percentage")
+                    else:
+                        raise ValueError({"num_graph argument must be 'kde', 'bar' or both"})
+                        
+                else:
+                    if num_graph == "kde":
+                        sns.kdeplot(data = self[num_plots], x = col, ax = ax2[math.floor(i/3)]) 
+                    else:
+                        if num_graph == "bar":
+                            sns.histplot(data = self[num_plots], x = col, kde = False, stat = "percent", \
+                                ax = ax2[math.floor(i/3)])
+                            ax2[math.floor(i/3)].set_ylabel("Percentage") 
+                        elif num_graph == "both":
+                            sns.histplot(data = self[num_plots], x = col, kde = True, stat = "percent", \
+                                ax = ax2[math.floor(i/3)])
+                            ax2[math.floor(i/3)].set_ylabel("Percentage") 
+                        
+
             plt.show()
 
-            fig3, ax3 = plt.subplots(rows_plots, 3, figsize = (15, rows_plots*5))
-            fig3.suptitle('Visualization of Outliers in Numerical Attributes', fontsize=16)
+            fig3, ax3 = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
+            fig3.suptitle('Visualization of Distribution and Outliers in Numerical Attributes', fontsize=16)
             for i, col in enumerate(num_plots):
-                sns.boxplot(data = self[num_plots], x = col, ax = ax3[math.floor(i/3)][int(i%3)], fliersize = 0.5)
+                if n_num_plots > 3:
+                    sns.boxplot(data = self[num_plots], x = col, ax = ax3[math.floor(i/3)][int(i%3)], fliersize = 0.5)
+                else:
+                    sns.boxplot(data = self[num_plots], x = col, ax = ax3[math.floor(i/3)], fliersize = 0.5)
             plt.show()
     
     
@@ -374,10 +411,94 @@ class EDADataFrame(pd.DataFrame):
         sns.heatmap(self[self.num_columns].corr(), annot = True)
     
 
-    def bivariate_analysis(self, x = "All", y = "All", graph = "") -> None:
-        pass
+    def bivariate_analysis(self, x: list = "All", y: list = "All", graph = "") -> None:
 
-    
+        if self.cat_columns or self.num_columns:
+            pass
+        else:
+            raise ValueError("cat_columns and num_columns attributes are empty")
+
+        if (x == "All") & (y == "All"):
+            x_cat_attrs = self.cat_columns
+            x_num_attrs = self.num_columns
+            y_cat_attrs = self.cat_columns
+            y_num_attrs = self.num_columns
+        elif (x != "All") & (y == "All"):
+            if isinstance(x, list):
+                for attr in x:
+                    if attr in self.columns:
+                        pass
+                    else:
+                        raise ValueError("Column {} is not defined in EDADataFrame object".format(attr))
+            else:
+                raise TypeError("The input must be a list")
+            x_cat_attrs = [attr for attr in x if attr in self.cat_columns]
+            x_num_attrs = [attr for attr in x if attr in self.num_columns]
+            y_cat_attrs = self.cat_columns
+            y_num_attrs = self.num_columns
+        elif (x == "All") & (y != "All"):
+            if isinstance(y, list):
+                for attr in y:
+                    if attr in self.columns:
+                        pass
+                    else:
+                        raise ValueError("Column {} is not defined in EDADataFrame object".format(attr))
+            else:
+                raise TypeError("The input must be a list")
+            x_cat_attrs = self.cat_columns
+            x_num_attrs = self.num_columns
+            y_cat_attrs = [attr for attr in y if attr in self.cat_columns]
+            y_num_attrs = [attr for attr in y if attr in self.num_columns]
+        else:
+            if (isinstance(x, list)) & (isinstance(y, list)):
+                for attr in x+y:
+                    if attr in self.columns:
+                        pass
+                    else:
+                        raise ValueError("Column {} is not defined in EDADataFrame object".format(attr))
+            else:
+                raise TypeError("The inputs must be lists")
+            x_cat_attrs = [attr for attr in x if attr in self.cat_columns]
+            x_num_attrs = [attr for attr in x if attr in self.num_columns]
+            y_cat_attrs = [attr for attr in y if attr in self.cat_columns]
+            y_num_attrs = [attr for attr in y if attr in self.num_columns]
+
+        n_num_num_plots = len(x_num_attrs) * len(y_num_attrs)
+        n_num_cat_plots = len(x_num_attrs) * len(y_cat_attrs)
+        n_cat_num_plots = len(x_cat_attrs) * len(y_num_attrs)
+        n_cat_cat_plots = len(x_cat_attrs) * len(y_cat_attrs)
+
+        if n_cat_cat_plots > 0:
+            rows_plots = math.ceil(n_cat_cat_plots/3)
+            fig, ax = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5), sharey = True)
+            fig.suptitle('Bivariate Analysis of the Categorical Attributes', fontsize=16)
+            i = 0
+            for col1 in x_cat_attrs:
+                x = self[col1].value_counts().index.to_list()
+                y = self[col1].value_counts(normalize = True).values
+                for col2 in y_cat_attrs:
+                    if n_cat_cat_plots > 3:
+                        sns.countplot(x = self[col1], hue = self[col2], ax = ax[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
+                    else:
+                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
+                    i += 1   
+            plt.show()
+
+        if n_num_num_plots > 0:
+            rows_plots = math.ceil(n_num_num_plots/3)
+            fig, ax = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
+            fig.suptitle('Bivariate Analysis of the Numerical Attributes', fontsize=16)
+            i = 0
+            for col1 in x_num_attrs:
+                for col2 in y_num_attrs:
+                    if n_num_num_plots > 3:
+                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
+                    else:
+                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
+                    i += 1   
+            plt.show()
+           
+
     def outliers(self, attrs = "All") -> pd.DataFrame:
         """
         Calculates the limits for regular values in numeric columns and
