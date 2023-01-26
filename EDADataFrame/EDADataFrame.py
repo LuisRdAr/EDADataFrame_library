@@ -7,7 +7,7 @@ import math
 import re
 import warnings
 
-warnings.simplefilter(action='ignore', category=UserWarning)
+#warnings.simplefilter(action='ignore', category=UserWarning)
 
 class EDADataFrame(pd.DataFrame):
     """
@@ -412,6 +412,19 @@ class EDADataFrame(pd.DataFrame):
     
 
     def bivariate_analysis(self, x: list = "All", y: list = "All", graph = "") -> None:
+        """
+        Under construction.
+        Performs a bivariate analysis with the possibility of selecting specific attributes to
+        be plotted in the x and y axis.
+        In its current state it can plot a simple the relationship between numeric and numeric variables,
+        categorical with categorical, and categorical with numerical.
+
+        Parameters
+        ----------
+        x: list of attributes contained in the EDADataFrame to be plotted in the x-axis.
+        y: list of attributes contained in the EDADataFrame to be plotted in the y-axis.
+        graph: option to select between some different kind of plots.
+        """
 
         if self.cat_columns or self.num_columns:
             pass
@@ -486,18 +499,40 @@ class EDADataFrame(pd.DataFrame):
 
         if n_num_num_plots > 0:
             rows_plots = math.ceil(n_num_num_plots/3)
-            fig, ax = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
-            fig.suptitle('Bivariate Analysis of the Numerical Attributes', fontsize=16)
+            fig2, ax2 = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
+            fig2.suptitle('Bivariate Analysis of the Numerical Attributes', fontsize=16)
             i = 0
             for col1 in x_num_attrs:
                 for col2 in y_num_attrs:
                     if n_num_num_plots > 3:
-                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
+                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax2[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
                     else:
-                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
+                        sns.scatterplot(x = self[col1], y = self[col2], ax = ax2[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
                     i += 1   
             plt.show()
-           
+        
+        if (n_cat_num_plots > 0) or n_num_cat_plots > 0: #and ((x != "All") & (y != "All"))
+            rows_plots = math.ceil((n_cat_num_plots + n_num_cat_plots)/3)
+            fig3, ax3 = plt.subplots(rows_plots, 3, figsize = (18, rows_plots*5))
+            fig3.suptitle('Bivariate Analysis of the Categorical vs Numerical Attributes', fontsize=16)
+            i = 0
+            for col1 in x_cat_attrs:
+                for col2 in y_num_attrs:
+                    if n_cat_num_plots + n_num_cat_plots > 3:
+                        sns.violinplot(x = self[col1], y = self[col2], ax = ax3[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
+                    else:
+                        sns.violinplot(x = self[col1], y = self[col2], ax = ax3[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
+                    i += 1 
+            for col1 in y_cat_attrs:
+                for col2 in x_num_attrs:
+                    if n_cat_num_plots + n_num_cat_plots > 3:
+                        sns.violinplot(x = self[col1], y = self[col2], ax = ax3[math.floor(i/3)][int(i%3)]).set_title("{} - {}".format(col1, col2))
+                    else:
+                        sns.violinplot(x = self[col1], y = self[col2], ax = ax3[math.floor(i/3)]).set_title("{} - {}".format(col1, col2))
+                    i += 1
+
+            plt.show()
+
 
     def outliers(self, attrs = "All") -> pd.DataFrame:
         """
